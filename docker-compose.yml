@@ -1,0 +1,11 @@
+
+services:
+  persian-currency-bot:
+    build: .
+    container_name: persian-currency-bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./config.json:/app/config.json:ro
+    environment:
+      - PCB_DATA_DIR=/app/data

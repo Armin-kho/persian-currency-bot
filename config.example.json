@@ -1,0 +1,11 @@
+{
+  "bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
+  "data_dir": "/var/lib/persian-currency-bot",
+  "initial_admin_ids": [
+    123456789
+  ],
+  "bonbast_api_username": "",
+  "bonbast_api_hash": "",
+  "navasan_api_key": "",
+  "debug": false
+}
