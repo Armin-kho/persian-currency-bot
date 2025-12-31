@@ -128,12 +128,12 @@ download_modules() {
     go mod edit -replace=github.com/go-universal/jalaali=github.com/go-universal/jalaali@master
   fi
 
-  if GOTOOLCHAIN=local go mod download; then
+  if GOTOOLCHAIN="${GOTOOLCHAIN:-auto}" go mod download; then
     return
   fi
 
   echo "Initial module download failed; retrying with GOPROXY=direct and GOSUMDB=off..."
-  if GOPROXY=direct GOSUMDB=off GOTOOLCHAIN=local go mod download; then
+  if GOPROXY=direct GOSUMDB=off GOTOOLCHAIN="${GOTOOLCHAIN:-auto}" go mod download; then
     return
   fi
 
@@ -264,7 +264,7 @@ cd "$PROJECT_DIR"
 echo "Downloading Go modules..."
 download_modules
 echo "Building binary..."
-GOTOOLCHAIN=local CGO_ENABLED=0 go build -o "$BIN_PATH" ./cmd/bot
+GOTOOLCHAIN="${GOTOOLCHAIN:-auto}" CGO_ENABLED=0 go build -o "$BIN_PATH" ./cmd/bot
 
 chmod 755 "$BIN_PATH"
 
