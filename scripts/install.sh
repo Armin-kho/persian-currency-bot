@@ -6,7 +6,7 @@ set -euo pipefail
 #  - systemd install (builds binary using go)
 #  - docker compose install (builds container)
 
-MODE="${1:-}"
+MODE="${1:-${MODE:-}}"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo "Please run as root (sudo)."
@@ -51,19 +51,17 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
-PROJECT_DIR="$(pwd)"
+PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+REPO_URL="${REPO_URL:-https://github.com/Armin-kho/persian-currency-bot.git}"
+REPO_REF="${REPO_REF:-}"
+REPO_DIR="${REPO_DIR:-/opt/persian-currency-bot}"
 CONFIG_DIR="/etc/persian-currency-bot"
 DATA_DIR="/var/lib/persian-currency-bot"
 CONFIG_PATH="${CONFIG_DIR}/config.json"
+HOST_DATA_DIR="$DATA_DIR"
 BIN_PATH="/usr/local/bin/persian-currency-bot"
 SERVICE_PATH="/etc/systemd/system/persian-currency-bot.service"
 RUN_USER="pcb"
-
-echo "=== Persian Currency Bot Installer ==="
-echo "Project dir: $PROJECT_DIR"
-echo "Config:      $CONFIG_PATH"
-echo "Data dir:    $DATA_DIR"
-echo
 
 if [[ -z "$MODE" ]]; then
   if need_cmd docker && (need_cmd docker-compose || docker compose version >/dev/null 2>&1); then
@@ -82,19 +80,89 @@ PM="$(detect_pm)"
 echo "Detected package manager: $PM"
 
 # Basic deps
-install_packages "$PM" ca-certificates curl tzdata
+install_packages "$PM" ca-certificates curl tzdata git
 
-mkdir -p "$CONFIG_DIR" "$DATA_DIR"
+ensure_project_dir() {
+  if [[ -f "$PROJECT_DIR/go.mod" ]]; then
+    return
+  fi
 
-read -rp "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
-read -rp "Enter initial admin user IDs (comma-separated) or leave blank: " ADMINS
+  echo "Project files not found in $PROJECT_DIR."
+  echo "Downloading repository into $REPO_DIR..."
+
+  if [[ -d "$REPO_DIR/.git" ]]; then
+    echo "Repository already exists in $REPO_DIR, using existing checkout."
+  else
+    mkdir -p "$(dirname "$REPO_DIR")"
+    rm -rf "$REPO_DIR"
+    git clone --depth 1 "$REPO_URL" "$REPO_DIR"
+  fi
+
+  if [[ -n "$REPO_REF" ]]; then
+    git -C "$REPO_DIR" fetch --depth 1 origin "$REPO_REF"
+    git -C "$REPO_DIR" checkout "$REPO_REF"
+  fi
+
+  PROJECT_DIR="$REPO_DIR"
+}
+
+ensure_project_dir
+
+configure_paths() {
+  if [[ "$MODE" == "docker" ]]; then
+    CONFIG_DIR="$PROJECT_DIR"
+    CONFIG_PATH="${CONFIG_DIR}/config.json"
+    DATA_DIR="/app/data"
+    HOST_DATA_DIR="${PROJECT_DIR}/data"
+  else
+    CONFIG_DIR="/etc/persian-currency-bot"
+    CONFIG_PATH="${CONFIG_DIR}/config.json"
+    DATA_DIR="/var/lib/persian-currency-bot"
+    HOST_DATA_DIR="$DATA_DIR"
+  fi
+}
+
+download_modules() {
+  if go mod download; then
+    return
+  fi
+
+  echo "Initial module download failed; retrying with GOPROXY=direct and GOSUMDB=off..."
+  GOPROXY=direct GOSUMDB=off go mod download
+}
+
+configure_paths
+
+echo "=== Persian Currency Bot Installer ==="
+echo "Project dir: $PROJECT_DIR"
+echo "Config:      $CONFIG_PATH"
+echo "Data dir:    $DATA_DIR"
+echo
+
+mkdir -p "$CONFIG_DIR" "$HOST_DATA_DIR"
+
+BOT_TOKEN="${BOT_TOKEN:-}"
+ADMIN_IDS="${ADMIN_IDS:-${ADMINS:-}}"
+NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
+
+if [[ -z "$BOT_TOKEN" ]]; then
+  if [[ "$NON_INTERACTIVE" == "true" ]]; then
+    echo "BOT_TOKEN is required in non-interactive mode."
+    exit 1
+  fi
+  read -rp "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
+fi
+
+if [[ -z "$ADMIN_IDS" && "$NON_INTERACTIVE" != "true" ]]; then
+  read -rp "Enter initial admin user IDs (comma-separated) or leave blank: " ADMIN_IDS
+fi
 
 # IMPORTANT NOTE: If you leave admins blank, the first person who starts the bot in private chat becomes the super admin.
 cat > "$CONFIG_PATH" <<EOF
 {
   "bot_token": "${BOT_TOKEN}",
   "data_dir": "${DATA_DIR}",
-  "initial_admin_ids": [$(echo "$ADMINS" | awk -F',' '{for(i=1;i<=NF;i++){gsub(/^[ \t]+|[ \t]+$/,"",$i); if($i!=""){printf "%s%s", (c?"," : ""), $i; c=1}}}')],
+  "initial_admin_ids": [$(echo "$ADMIN_IDS" | awk -F',' '{for(i=1;i<=NF;i++){gsub(/^[ \t]+|[ \t]+$/,"",$i); if($i!=""){printf "%s%s", (c?"," : ""), $i; c=1}}}')],
   "bonbast_api_username": "",
   "bonbast_api_hash": "",
   "navasan_api_key": "",
@@ -159,8 +227,10 @@ fi
 chown -R "$RUN_USER":"$RUN_USER" "$DATA_DIR"
 chmod 750 "$DATA_DIR"
 
-echo "Building binary..."
 cd "$PROJECT_DIR"
+echo "Downloading Go modules..."
+download_modules
+echo "Building binary..."
 CGO_ENABLED=0 go build -o "$BIN_PATH" ./cmd/bot
 
 chmod 755 "$BIN_PATH"
