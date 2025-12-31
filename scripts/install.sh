@@ -129,16 +129,19 @@ download_modules() {
   fi
 
   if GOTOOLCHAIN=local go mod download; then
+  if go mod download; then
     return
   fi
 
   echo "Initial module download failed; retrying with GOPROXY=direct and GOSUMDB=off..."
   if GOPROXY=direct GOSUMDB=off GOTOOLCHAIN=local go mod download; then
+  if GOPROXY=direct GOSUMDB=off go mod download; then
     return
   fi
 
   echo "Module download failed after retry. Please check network access to Go modules."
   return 1
+  GOPROXY=direct GOSUMDB=off go mod download
 }
 
 configure_paths
@@ -162,6 +165,20 @@ read_from_tty() {
   fi
   printf -v "$out_var" "%s" "$value"
 }
+BOT_TOKEN="${BOT_TOKEN:-}"
+ADMIN_IDS="${ADMIN_IDS:-${ADMINS:-}}"
+NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
+
+if [[ -z "$BOT_TOKEN" ]]; then
+  if [[ "$NON_INTERACTIVE" == "true" ]]; then
+    echo "BOT_TOKEN is required in non-interactive mode."
+    exit 1
+  fi
+  read -rp "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
+fi
+
+
+mkdir -p "$CONFIG_DIR" "$HOST_DATA_DIR"
 
 BOT_TOKEN="${BOT_TOKEN:-}"
 ADMIN_IDS="${ADMIN_IDS:-${ADMINS:-}}"
@@ -177,6 +194,11 @@ fi
 
 if [[ -z "$ADMIN_IDS" && "$NON_INTERACTIVE" != "true" ]]; then
   read_from_tty "Enter initial admin user IDs (comma-separated) or leave blank: " ADMIN_IDS
+  read -rp "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
+fi
+
+if [[ -z "$ADMIN_IDS" && "$NON_INTERACTIVE" != "true" ]]; then
+  read -rp "Enter initial admin user IDs (comma-separated) or leave blank: " ADMIN_IDS
 fi
 
 # IMPORTANT NOTE: If you leave admins blank, the first person who starts the bot in private chat becomes the super admin.
@@ -260,6 +282,7 @@ echo "Downloading Go modules..."
 download_modules
 echo "Building binary..."
 GOTOOLCHAIN=local CGO_ENABLED=0 go build -o "$BIN_PATH" ./cmd/bot
+CGO_ENABLED=0 go build -o "$BIN_PATH" ./cmd/bot
 
 chmod 755 "$BIN_PATH"
 
