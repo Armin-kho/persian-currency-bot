@@ -123,11 +123,22 @@ configure_paths() {
 }
 
 download_modules() {
+  if ! grep -q "replace github.com/go-universal/jalaali" go.mod; then
+    echo "Pinning jalaali to master..."
+    go mod edit -replace=github.com/go-universal/jalaali=github.com/go-universal/jalaali@master
+  fi
+
   if go mod download; then
     return
   fi
 
   echo "Initial module download failed; retrying with GOPROXY=direct and GOSUMDB=off..."
+  if GOPROXY=direct GOSUMDB=off go mod download; then
+    return
+  fi
+
+  echo "Module download failed after retry. Please check network access to Go modules."
+  return 1
   GOPROXY=direct GOSUMDB=off go mod download
 }
 
@@ -138,6 +149,21 @@ echo "Project dir: $PROJECT_DIR"
 echo "Config:      $CONFIG_PATH"
 echo "Data dir:    $DATA_DIR"
 echo
+
+mkdir -p "$CONFIG_DIR" "$HOST_DATA_DIR"
+
+BOT_TOKEN="${BOT_TOKEN:-}"
+ADMIN_IDS="${ADMIN_IDS:-${ADMINS:-}}"
+NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
+
+if [[ -z "$BOT_TOKEN" ]]; then
+  if [[ "$NON_INTERACTIVE" == "true" ]]; then
+    echo "BOT_TOKEN is required in non-interactive mode."
+    exit 1
+  fi
+  read -rp "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
+fi
+
 
 mkdir -p "$CONFIG_DIR" "$HOST_DATA_DIR"
 
