@@ -128,11 +128,13 @@ download_modules() {
     go mod edit -replace=github.com/go-universal/jalaali=github.com/go-universal/jalaali@master
   fi
 
+  if GOTOOLCHAIN=local go mod download; then
   if go mod download; then
     return
   fi
 
   echo "Initial module download failed; retrying with GOPROXY=direct and GOSUMDB=off..."
+  if GOPROXY=direct GOSUMDB=off GOTOOLCHAIN=local go mod download; then
   if GOPROXY=direct GOSUMDB=off go mod download; then
     return
   fi
@@ -152,6 +154,17 @@ echo
 
 mkdir -p "$CONFIG_DIR" "$HOST_DATA_DIR"
 
+read_from_tty() {
+  local prompt="$1"
+  local out_var="$2"
+  local value=""
+  if [[ -t 0 ]]; then
+    read -rp "$prompt" value
+  else
+    read -rp "$prompt" value </dev/tty
+  fi
+  printf -v "$out_var" "%s" "$value"
+}
 BOT_TOKEN="${BOT_TOKEN:-}"
 ADMIN_IDS="${ADMIN_IDS:-${ADMINS:-}}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
@@ -176,6 +189,11 @@ if [[ -z "$BOT_TOKEN" ]]; then
     echo "BOT_TOKEN is required in non-interactive mode."
     exit 1
   fi
+  read_from_tty "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
+fi
+
+if [[ -z "$ADMIN_IDS" && "$NON_INTERACTIVE" != "true" ]]; then
+  read_from_tty "Enter initial admin user IDs (comma-separated) or leave blank: " ADMIN_IDS
   read -rp "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
 fi
 
@@ -196,7 +214,11 @@ cat > "$CONFIG_PATH" <<EOF
 }
 EOF
 
-chmod 600 "$CONFIG_PATH"
+if [[ "$MODE" == "docker" ]]; then
+  chmod 644 "$CONFIG_PATH"
+else
+  chmod 640 "$CONFIG_PATH"
+fi
 
 if [[ "$MODE" == "docker" ]]; then
   echo "Installing in Docker mode..."
@@ -250,6 +272,8 @@ if ! id "$RUN_USER" >/dev/null 2>&1; then
   fi
 fi
 
+chown "$RUN_USER":"$RUN_USER" "$CONFIG_PATH"
+
 chown -R "$RUN_USER":"$RUN_USER" "$DATA_DIR"
 chmod 750 "$DATA_DIR"
 
@@ -257,6 +281,7 @@ cd "$PROJECT_DIR"
 echo "Downloading Go modules..."
 download_modules
 echo "Building binary..."
+GOTOOLCHAIN=local CGO_ENABLED=0 go build -o "$BIN_PATH" ./cmd/bot
 CGO_ENABLED=0 go build -o "$BIN_PATH" ./cmd/bot
 
 chmod 755 "$BIN_PATH"
