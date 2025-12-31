@@ -129,16 +129,67 @@ download_modules() {
   fi
 
   if GOTOOLCHAIN=local go mod download; then
+
+ensure_project_dir() {
+  if [[ -f "$PROJECT_DIR/go.mod" ]]; then
+    return
+  fi
+
+  echo "Project files not found in $PROJECT_DIR."
+  echo "Downloading repository into $REPO_DIR..."
+
+  if [[ -d "$REPO_DIR/.git" ]]; then
+    echo "Repository already exists in $REPO_DIR, using existing checkout."
+  else
+    mkdir -p "$(dirname "$REPO_DIR")"
+    rm -rf "$REPO_DIR"
+    git clone --depth 1 "$REPO_URL" "$REPO_DIR"
+  fi
+
+  if [[ -n "$REPO_REF" ]]; then
+    git -C "$REPO_DIR" fetch --depth 1 origin "$REPO_REF"
+    git -C "$REPO_DIR" checkout "$REPO_REF"
+  fi
+
+  PROJECT_DIR="$REPO_DIR"
+}
+
+ensure_project_dir
+
+configure_paths() {
+  if [[ "$MODE" == "docker" ]]; then
+    CONFIG_DIR="$PROJECT_DIR"
+    CONFIG_PATH="${CONFIG_DIR}/config.json"
+    DATA_DIR="/app/data"
+    HOST_DATA_DIR="${PROJECT_DIR}/data"
+  else
+    CONFIG_DIR="/etc/persian-currency-bot"
+    CONFIG_PATH="${CONFIG_DIR}/config.json"
+    DATA_DIR="/var/lib/persian-currency-bot"
+    HOST_DATA_DIR="$DATA_DIR"
+  fi
+}
+
+download_modules() {
+  if ! grep -q "replace github.com/go-universal/jalaali" go.mod; then
+    echo "Pinning jalaali to master..."
+    go mod edit -replace=github.com/go-universal/jalaali=github.com/go-universal/jalaali@master
+  fi
+
+  if GOTOOLCHAIN=local go mod download; then
+  if go mod download; then
     return
   fi
 
   echo "Initial module download failed; retrying with GOPROXY=direct and GOSUMDB=off..."
   if GOPROXY=direct GOSUMDB=off GOTOOLCHAIN=local go mod download; then
+  if GOPROXY=direct GOSUMDB=off go mod download; then
     return
   fi
 
   echo "Module download failed after retry. Please check network access to Go modules."
   return 1
+  GOPROXY=direct GOSUMDB=off go mod download
 }
 
 configure_paths
@@ -155,6 +206,17 @@ echo
 
 mkdir -p "$CONFIG_DIR" "$HOST_DATA_DIR"
 
+read_from_tty() {
+  local prompt="$1"
+  local out_var="$2"
+  local value=""
+  if [[ -t 0 ]]; then
+    read -rp "$prompt" value
+  else
+    read -rp "$prompt" value </dev/tty
+  fi
+  printf -v "$out_var" "%s" "$value"
+}
 BOT_TOKEN="${BOT_TOKEN:-}"
 ADMIN_IDS="${ADMIN_IDS:-${ADMINS:-}}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
@@ -164,6 +226,26 @@ if [[ -z "$BOT_TOKEN" ]]; then
     echo "BOT_TOKEN is required in non-interactive mode."
     exit 1
   fi
+  read -rp "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
+fi
+
+
+mkdir -p "$CONFIG_DIR" "$HOST_DATA_DIR"
+
+BOT_TOKEN="${BOT_TOKEN:-}"
+ADMIN_IDS="${ADMIN_IDS:-${ADMINS:-}}"
+NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
+
+if [[ -z "$BOT_TOKEN" ]]; then
+  if [[ "$NON_INTERACTIVE" == "true" ]]; then
+    echo "BOT_TOKEN is required in non-interactive mode."
+    exit 1
+  fi
+  read_from_tty "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
+fi
+
+if [[ -z "$ADMIN_IDS" && "$NON_INTERACTIVE" != "true" ]]; then
+  read_from_tty "Enter initial admin user IDs (comma-separated) or leave blank: " ADMIN_IDS
   read -rp "Enter Telegram Bot Token (BOT_TOKEN): " BOT_TOKEN
 fi
 
@@ -252,6 +334,7 @@ echo "Downloading Go modules..."
 download_modules
 echo "Building binary..."
 GOTOOLCHAIN=local CGO_ENABLED=0 go build -o "$BIN_PATH" ./cmd/bot
+CGO_ENABLED=0 go build -o "$BIN_PATH" ./cmd/bot
 
 chmod 755 "$BIN_PATH"
 
