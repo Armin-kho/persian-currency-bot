@@ -137,9 +137,8 @@ download_modules() {
     return
   fi
 
-  echo "Retrying by pinning jalaali to master..."
-  GOPROXY=direct GOSUMDB=off go get github.com/go-universal/jalaali@master
-  GOPROXY=direct GOSUMDB=off go mod download
+  echo "Module download failed after retry. Please check network access to Go modules."
+  return 1
 }
 
 configure_paths
