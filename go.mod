@@ -8,3 +8,5 @@ require (
 	github.com/go-universal/jalaali v1.1.0
 	modernc.org/sqlite v1.33.1
 )
+
+replace github.com/go-universal/jalaali => github.com/go-universal/jalaali master
