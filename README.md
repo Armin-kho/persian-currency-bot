@@ -69,6 +69,28 @@ cp config.example.json config.json
 docker compose up -d --build
 ```
 
+### One-line install (interactive or non-interactive)
+
+You can install and configure in a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Armin-kho/persian-currency-bot/main/scripts/install.sh | sudo bash
+```
+
+With environment variables:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Armin-kho/persian-currency-bot/main/scripts/install.sh | \
+  sudo BOT_TOKEN="123456:ABC" ADMIN_IDS="12345,67890" MODE=docker bash
+```
+
+To run fully non-interactive (fails if `BOT_TOKEN` is missing):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Armin-kho/persian-currency-bot/main/scripts/install.sh | \
+  sudo BOT_TOKEN="123456:ABC" ADMIN_IDS="12345,67890" MODE=systemd NON_INTERACTIVE=true bash
+```
+
 ---
 
 ## Run with systemd (Linux)
