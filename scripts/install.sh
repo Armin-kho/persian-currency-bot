@@ -123,6 +123,11 @@ configure_paths() {
 }
 
 download_modules() {
+  if ! grep -q "replace github.com/go-universal/jalaali" go.mod; then
+    echo "Pinning jalaali to master..."
+    go mod edit -replace=github.com/go-universal/jalaali=github.com/go-universal/jalaali@master
+  fi
+
   if go mod download; then
     return
   fi
