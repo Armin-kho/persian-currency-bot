@@ -224,8 +224,8 @@ func (a *App) handleMyChatMember(m tgbotapi.ChatMemberUpdated) {
 	}
 
 	fromStr := ""
-	if m.From != nil {
-		fromStr = fmt.Sprintf("\nاضافه‌کننده: %s (%d)", displayName(*m.From), m.From.ID)
+	if m.From.ID != 0 {
+		fromStr = fmt.Sprintf("\nاضافه‌کننده: %s (%d)", displayName(m.From), m.From.ID)
 	}
 
 	text := fmt.Sprintf("🆕 ربات به یک %s اضافه شد و نیاز به تایید دارد:\n\nعنوان: %s\nChat ID: %d%s",
@@ -374,8 +374,8 @@ func (a *App) handleMessage(msg tgbotapi.Message) {
 		}
 		mediaType := ""
 		fileID := ""
-		if msg.Photo != nil && len(*msg.Photo) > 0 {
-			ph := (*msg.Photo)[len(*msg.Photo)-1]
+		if len(msg.Photo) > 0 {
+			ph := msg.Photo[len(msg.Photo)-1]
 			mediaType = "photo"
 			fileID = ph.FileID
 		} else if msg.Video != nil {
@@ -459,7 +459,7 @@ func displayName(u tgbotapi.User) string {
 		name = u.UserName
 	}
 	if name == "" {
-		name = strconv.Itoa(u.ID)
+		name = strconv.FormatInt(u.ID, 10)
 	}
 	return name
 }
@@ -915,7 +915,12 @@ func (a *App) sendChatMenu(userID int64, msgID int, chatID int64) {
 		en = "⛔️ خاموش"
 	}
 
-	text := fmt.Sprintf("⚙️ تنظیمات چت\n\nعنوان: %s\nChat ID: %d\nنوع: %s\nوضعیت: %s\nفعال: %s\n\nمنبع: %s (%s)\nبازه: هر %d دقیقه (مرزبندی تهران)\nDowntime: %v (%s تا %s)\nTrigger: %d مورد | Threshold: %s %.2f\nقیمت: %s\nارسال: %s\nDigits: %s\nقالب: %s",
+	showSame := "خیر"
+	if st.ShowSameArrow {
+		showSame = "بله"
+	}
+
+	text := fmt.Sprintf("⚙️ تنظیمات چت\n\nعنوان: %s\nChat ID: %d\nنوع: %s\nوضعیت: %s\nفعال: %s\n\nمنبع: %s (%s)\nبازه: هر %d دقیقه (مرزبندی تهران)\nDowntime: %v (%s تا %s)\nTrigger: %d مورد | Threshold: %s %.2f\nقیمت: %s\nارسال: %s\nDigits: %s\nفلش تکراری: %s\nقالب: %s",
 		ch.Title, ch.ChatID, ch.Type, status, en,
 		st.SourceProvider, st.SourceMethod,
 		st.IntervalMinutes,
@@ -924,7 +929,7 @@ func (a *App) sendChatMenu(userID int64, msgID int, chatID int64) {
 		st.PriceMode,
 		st.PostMode,
 		st.Digits,
-		st.ShowSameArrow,
+		showSame,
 		st.TemplateID,
 	)
 
