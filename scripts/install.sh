@@ -129,6 +129,54 @@ download_modules() {
   fi
 
   if GOTOOLCHAIN=local go mod download; then
+
+ensure_project_dir() {
+  if [[ -f "$PROJECT_DIR/go.mod" ]]; then
+    return
+  fi
+
+  echo "Project files not found in $PROJECT_DIR."
+  echo "Downloading repository into $REPO_DIR..."
+
+  if [[ -d "$REPO_DIR/.git" ]]; then
+    echo "Repository already exists in $REPO_DIR, using existing checkout."
+  else
+    mkdir -p "$(dirname "$REPO_DIR")"
+    rm -rf "$REPO_DIR"
+    git clone --depth 1 "$REPO_URL" "$REPO_DIR"
+  fi
+
+  if [[ -n "$REPO_REF" ]]; then
+    git -C "$REPO_DIR" fetch --depth 1 origin "$REPO_REF"
+    git -C "$REPO_DIR" checkout "$REPO_REF"
+  fi
+
+  PROJECT_DIR="$REPO_DIR"
+}
+
+ensure_project_dir
+
+configure_paths() {
+  if [[ "$MODE" == "docker" ]]; then
+    CONFIG_DIR="$PROJECT_DIR"
+    CONFIG_PATH="${CONFIG_DIR}/config.json"
+    DATA_DIR="/app/data"
+    HOST_DATA_DIR="${PROJECT_DIR}/data"
+  else
+    CONFIG_DIR="/etc/persian-currency-bot"
+    CONFIG_PATH="${CONFIG_DIR}/config.json"
+    DATA_DIR="/var/lib/persian-currency-bot"
+    HOST_DATA_DIR="$DATA_DIR"
+  fi
+}
+
+download_modules() {
+  if ! grep -q "replace github.com/go-universal/jalaali" go.mod; then
+    echo "Pinning jalaali to master..."
+    go mod edit -replace=github.com/go-universal/jalaali=github.com/go-universal/jalaali@master
+  fi
+
+  if GOTOOLCHAIN=local go mod download; then
   if go mod download; then
     return
   fi
@@ -145,6 +193,10 @@ download_modules() {
 }
 
 configure_paths
+
+if [[ ! -t 0 && -r /dev/tty ]]; then
+  exec </dev/tty
+fi
 
 echo "=== Persian Currency Bot Installer ==="
 echo "Project dir: $PROJECT_DIR"
